@@ -3,9 +3,40 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0a0d14">
+<meta name="description" content="Btuner POS – Book Store Billing & Inventory Management PWA">
 <title>Btuner POS – Book Store Billing & Inventory</title>
-<!-- SVG Favicon in Warm Light Yellow / Amber -->
+
+<!-- SVG Favicon -->
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23fbbf24'><path d='M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253'/></svg>">
+
+<!-- PWA Manifest Dynamic Injector -->
+<script>
+  const manifestData = {
+    "name": "Btuner POS Book Store",
+    "short_name": "Btuner POS",
+    "start_url": "./",
+    "display": "standalone",
+    "background_color": "#0a0d14",
+    "theme_color": "#fbbf24",
+    "icons": [
+      {
+        "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23fbbf24'><path d='M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253'/></svg>",
+        "sizes": "192x192 512x512",
+        "type": "image/svg+xml",
+        "purpose": "any maskable"
+      }
+    ]
+  };
+  const stringManifest = JSON.stringify(manifestData);
+  const blob = new Blob([stringManifest], {type: 'application/json'});
+  const manifestURL = URL.createObjectURL(blob);
+  const link = document.createElement('link');
+  link.rel = 'manifest';
+  link.href = manifestURL;
+  document.head.appendChild(link);
+</script>
+
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -136,6 +167,11 @@
     </div>
 
     <div class="space-y-3 pt-3 border-t border-slate-200 dark:border-dark-border">
+      <button id="pwaInstallBtn" class="nav-btn text-xs hidden !bg-amber-400/20 !text-amber-400 font-bold border border-amber-400/40">
+        <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+        <span class="hidden md:inline">Install App</span>
+      </button>
+
       <button id="themeBtn" class="nav-btn text-xs">
         <span id="themeIco" class="shrink-0"></span>
         <span class="hidden md:inline">Toggle Theme</span>
@@ -379,6 +415,49 @@
 <div id="toast" class="pointer-events-none fixed bottom-6 right-6 z-[70] hidden items-center gap-3 rounded-2xl px-5 py-3 text-sm font-semibold text-white shadow-2xl backdrop-blur-lg transition-all duration-300"></div>
 
 <script>
+/* ---------- Service Worker Registration for PWA ---------- */
+if ('serviceWorker' in navigator) {
+  const swCode = `
+    const CACHE_NAME = 'btuner-pos-v1';
+    self.addEventListener('install', e => {
+      self.skipWaiting();
+    });
+    self.addEventListener('activate', e => {
+      self.clients.claim();
+    });
+    self.addEventListener('fetch', e => {
+      e.respondWith(
+        fetch(e.request).catch(() => caches.match(e.request))
+      );
+    });
+  `;
+  const blob = new Blob([swCode], { type: 'text/javascript' });
+  const swUrl = URL.createObjectURL(blob);
+  navigator.serviceWorker.register(swUrl).catch(err => console.log('SW Reg Failed', err));
+}
+
+let deferredPrompt;
+const installBtn = document.getElementById('pwaInstallBtn');
+
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+  if(installBtn) installBtn.classList.remove('hidden');
+});
+
+if(installBtn) {
+  installBtn.addEventListener('click', async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') {
+        installBtn.classList.add('hidden');
+      }
+      deferredPrompt = null;
+    }
+  });
+}
+
 /* ---------- Helpers & State ---------- */
 const STORE = { name: 'Btuner Book Store', addr: 'Shop 12, Book Market, Karachi', phone: '+92 300 0000000' };
 const CUR = 'PKR ';
@@ -386,6 +465,8 @@ const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
 const fmt = n => CUR + Number(n || 0).toLocaleString('en-PK', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+// LocalStorage Persistence Strategy
 const ld = (k, d) => { try { const v = JSON.parse(localStorage.getItem(k)); return v ?? d; } catch (e) { return d; } };
 const sv = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { toast('Could not save – storage blocked or full', 'err'); } };
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -683,7 +764,7 @@ $('#checkoutBtn').onclick = () => {
   $('#dVal').value = 0;
 
   renderPOS();
-  toast('Sale saved to online sales record!');
+  toast('Sale saved to local storage!');
   showInvoice(sale);
 };
 
@@ -774,7 +855,6 @@ async function dlPdf() {
   const btn = $('#dlPdf');
   if (btn) { btn.disabled = true; btn.textContent = 'Preparing PDF...'; }
 
-  // Create staging element inside normal layout layer to guarantee valid rendering
   const stage = document.createElement('div');
   stage.style.cssText = 'position:fixed;left:-9999px;top:0;width:680px;background:#ffffff;z-index:-1;opacity:1;pointer-events:none;';
   
@@ -920,7 +1000,6 @@ function renderDash() {
     statCard("Average Order Value", fmt(avgOrderVal), "Avg spent per bill", orderIcon) +
     statCard("Total Books Sold", totalBooksSold + " Copies", `${books.length} titles in catalog`, bookIcon);
 
-  // Revenue chart calculations
   const days = [...Array(7)].map((_, i) => {
     const d = new Date();
     d.setDate(d.getDate() - (6 - i));
@@ -970,7 +1049,6 @@ function renderDash() {
       ${grid}${bars}
     </svg>`;
 
-  // Top selling titles
   const m = {};
   sales.forEach(s => s.items.forEach(i => m[i.title] = (m[i.title] || 0) + i.qty));
   const top = Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 5);
@@ -981,7 +1059,6 @@ function renderDash() {
       <span class="px-2.5 py-0.5 rounded-full bg-amber-400/15 text-amber-400 text-xs font-bold">${q} sold</span>
     </div>`).join('') || '<p class="text-slate-400 text-xs">No sales recorded yet.</p>';
 
-  // Low stock items
   $('#dLow').innerHTML = low.map(b => `
     <div class="flex items-center justify-between p-3 rounded-xl bg-slate-100/50 dark:bg-dark-panel/40 border border-slate-200/50 dark:border-dark-border/50">
       <div>
